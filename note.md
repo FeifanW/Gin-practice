@@ -1021,13 +1021,171 @@ func main() {
 
 ##### 全局中间件和中间件传参：
 
+###### 全局注册中间件：
 
+```go
+package main
 
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+)
 
+func m10(c *gin.Context) { // 全局中间件
+	fmt.Println("m10...in")
+	c.JSON(200, gin.H{"msg": "响应被我吃掉了"})
+	c.Abort()
+	c.Next()
+	fmt.Println("m10...out")
+}
+func m11(c *gin.Context) { // 全局中间件
+	fmt.Println("m11...in")
+	c.Next()
+	fmt.Println("m11...out")
+}
 
+func main() {
+	router := gin.Default()
+	router.Use(m10, m11) // 注册中间件
+	router.GET("/m10", func(c *gin.Context) {
+		fmt.Println("index...in")
+		c.JSON(200, gin.H{"msg": "m10"})
+		c.Next()
+		fmt.Println("index...out")
+	})
+	router.GET("/m11", func(c *gin.Context) {
+		c.JSON(200, gin.H{"msg": "m11"})
+	})
+	router.Run(":8080")
+}
+```
 
+###### 中间件传递数据：
 
+```go
+package main
 
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+)
+
+type User struct {
+	Name string
+	Age  int
+}
+
+func m10(c *gin.Context) { // 全局中间件
+	fmt.Println("m10...in")
+	c.JSON(200, gin.H{"msg": "响应被我吃掉了"})
+	c.Set("name", "zzz")
+	c.Set("user", User{
+		Name: "test",
+		Age:  25,
+	})
+	//c.Abort()
+	//c.Next()
+	fmt.Println("m10...out")
+}
+func m11(c *gin.Context) { // 全局中间件
+	fmt.Println("m11...in")
+	c.Next()
+	fmt.Println("m11...out")
+}
+
+func main() {
+	router := gin.Default()
+	router.Use(m10, m11) // 注册中间件
+	router.GET("/m10", func(c *gin.Context) {
+		fmt.Println("index...in")
+		c.JSON(200, gin.H{"msg": "m10"})
+		name, _ := c.Get("name")
+		fmt.Println(name)
+		_user, _ := c.Get("user")
+		user := _user.(User) // 如果需要用到user中的某一个字段，需要断言
+		fmt.Println(user.Name)
+		c.Next()
+		fmt.Println("index...out")
+	})
+	router.GET("/m11", func(c *gin.Context) {
+		c.JSON(200, gin.H{"msg": "m11"})
+	})
+	router.Run(":8080")
+}
+```
+
+##### 路由分组：
+
+将一系列路由放到一个组下，统一管理
+
+```go
+package main
+
+import "github.com/gin-gonic/gin"
+
+type UserInfo struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
+
+type ArticleInfo struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+type Response struct {
+	Code int    `json:"code"`
+	Data any    `json:"data"`
+	Msg  string `json:"msg"`
+}
+
+func UserList(c *gin.Context) {
+	var userList []UserInfo = []UserInfo{
+		{"book", 21},
+		{"li", 22},
+		{"wang", 23},
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Data: userList,
+		Msg:  "请求成功",
+	})
+}
+func articleList(c *gin.Context) {
+	var userList = []ArticleInfo{
+		{"go", "从0到1"},
+		{"python", "从0到1"},
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Data: userList,
+		Msg:  "请求成功",
+	})
+}
+
+func main() {
+	router := gin.Default()
+
+	api := router.Group("api")
+	userManger := api.Group("user_manager")
+	{
+		userManger.GET("/users", UserList) // 访问需要/api/user_manager/users
+	}
+	articleManager := api.Group("article_manager")
+	{
+		articleManager.GET("/articles", articleList)
+	}
+	//api.GET("/users", UserList)        // 访问需要/api/users
+	//router.GET("/users", UserList)
+	router.Run(":8080")
+}
+```
+
+##### 路由分组中间件：
+
+```go
+
+```
 
 
 
