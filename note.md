@@ -973,7 +973,7 @@ Gin框架允许开发者在处理请求中，加入用户自己的钩子（Hook�
 
 Gin的中间件必须是一个gin.HandlerFunc类型
 
-##### 单独注册中间件
+##### 单独注册中间件：
 
 c.Next()之前的就是请求中间件，之后的就是响应中间件
 
@@ -1184,8 +1184,465 @@ func main() {
 ##### 路由分组中间件：
 
 ```go
+package main
 
+import "github.com/gin-gonic/gin"
+
+type UserInfo struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
+
+type ArticleInfo struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+type Response struct {
+	Code int    `json:"code"`
+	Data any    `json:"data"`
+	Msg  string `json:"msg"`
+}
+
+func UserList(c *gin.Context) {
+	var userList []UserInfo = []UserInfo{
+		{"book", 21},
+		{"li", 22},
+		{"wang", 23},
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Data: userList,
+		Msg:  "请求成功",
+	})
+}
+func articleList(c *gin.Context) {
+	var userList = []ArticleInfo{
+		{"go", "从0到1"},
+		{"python", "从0到1"},
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Data: userList,
+		Msg:  "请求成功",
+	})
+}
+
+func MiddleWare(c *gin.Context) {
+	token := c.GetHeader("token")
+	if token == "1234" {
+		c.Next()
+		return
+	}
+	c.JSON(200, Response{
+		Code: 200,
+		Data: nil,
+		Msg:  "权限验证失败",
+	})
+}
+
+func main() {
+	router := gin.Default()
+	//router := gin.New()  // 不含任何中间件
+
+	api := router.Group("api")
+	userManger := api.Group("user_manager").Use(MiddleWare)
+	{
+		userManger.GET("/users", UserList) // 访问需要/api/user_manager/users
+	}
+	articleManager := api.Group("article_manager")
+	{
+		articleManager.GET("/articles", articleList)
+	}
+	//api.GET("/users", UserList)        // 访问需要/api/users
+	//router.GET("/users", UserList)
+	router.Run(":8080")
+}
 ```
+
+#### 七、日志
+
+##### gin内置日志组件：
+
+为什么要使用日志
+
+1. 记录用户操作，猜测用户行为
+2. 记录bug
+
+环境切换不想看到debug日志可以改为release模式
+
+```go
+gin.SetMode(gin.ReleaseMode)
+router := gin.Default()
+```
+
+自定义输出格式
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"log"
+)
+
+func main() {
+	gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
+		log.Printf(
+			"%s %s %s %d \n",
+			httpMethod,
+			absolutePath,
+			handlerName,
+			nuHandlers,
+		)
+	}
+	//router := gin.Default()
+	router := gin.New()
+	router.Use(gin.LoggerWithFormatter(func(params gin.LogFormatterParams) string {
+		return fmt.Sprintf(
+			"%s |%d| %s %s\n",
+			params.TimeStamp.Format("2006-01-02 15:04:05"),
+			params.StatusCode,
+			params.Method,
+			params.MethodColor(), // 可以修改颜色
+			params.Path,
+		)
+	}))
+	router.GET("/index", func(c *gin.Context) {})
+	router.POST("/users", func(c *gin.Context) {})
+	router.POST("/articles", func(c *gin.Context) {})
+	router.DELETE("/articles/:id", func(c *gin.Context) {})
+	fmt.Println(router.Routes()) // 会把所有路由打印下来
+	router.Run(":8080")
+}
+```
+
+输出带颜色
+
+```go
+fmt.Printf("\033[97;41m红底白字\033[0m 正常颜色")
+```
+
+##### logrus:
+
+###### 下载：
+
+```go
+go get github.com/sirupsen/logrus
+```
+
+###### 日志等级：
+
+```go
+PanicLevel  // 会抛一个异常
+FatalLevel  // 打印日志之后就会退出
+ErrorLevel
+WarnLevel
+InfoLevel
+DebugLevel
+TraceLevel  // 低级别
+```
+
+###### 更改日志级别：
+
+```go
+logrus.SetLevel(logrus.WarnLevel) // 设置日志等级
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/sirupsen/logrus"
+)
+
+const (
+	cBlack = 0
+	cRed   = 1
+	cGreen = 2
+)
+
+func PrintColor(colorCode int, text string) {
+	fmt.Printf("\033[3%dm%s\033[0m", colorCode, text)
+}
+
+func main() {
+
+	PrintColor(cRed, "红色")
+	logrus.SetFormatter(&logrus.TextFormatter{
+		ForceColors:     true,
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.WarnLevel) // 设置日志等级
+	logrus.SetLevel(logrus.InfoLevel) // 设置日志等级
+	logrus.Errorf("出错了")
+	logrus.Warnln("警告")
+	logrus.Infof("信息")
+	logrus.Debugf("debug")
+	logrus.Println("打印")
+
+	fmt.Println(logrus.GetLevel())               // 显示等级
+	logrus.SetFormatter(&logrus.JSONFormatter{}) // 用JSON显示
+	logrus.SetFormatter(&logrus.TextFormatter{   // 设置颜色
+		ForceColors: true,
+	})
+
+	log := logrus.WithField("app", "study").WithField("service", "logrus") // 可以链式调用
+	log = logrus.WithFields(logrus.Fields{
+		"user": "ww",
+		"ip":   "192.168.200.254",
+	})
+	log.Errorf("你好") // 会统一加上上面的字段
+
+	fmt.Println("\033[31m 红色 \033[0m") // 设置字体颜色
+	fmt.Println("\033[41m 红色 \033[0m") // 设置背景颜色
+}
+```
+
+###### 自定义格式：
+
+输出到日志文件
+
+```go
+package main
+
+import (
+	"github.com/sirupsen/logrus"
+	"io"
+	"os"
+)
+
+func main() {
+	file, _ := os.OpenFile("logrus_study/info.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+
+	logrus.SetOutput(io.MultiWriter(file, os.Stdout)) // 同时输出屏幕和文件
+	logrus.Infof("你好")
+	logrus.Error("出错了")
+	logrus.Errorf("出错了")
+	logrus.Errorln("出错了")
+}
+```
+
+自定义输出格式：
+
+```go
+func main() {
+    router := gin.New()
+    // LoggerWithFormatter middleware will write the logs to gin.DefaultWrite
+    // By default gin.DefaultWriter = os.Stdout
+    router.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+        // your custom format
+        return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
+            param.ClientIP,
+            param.TimeStamp.Format(time.RFC1123),
+            param.Method,
+            param.Path,
+            param.Request.Proto,
+            param.StatusCode,
+            param.Latency,
+            param.Request.UserAgent(),
+            param.ErrorMessage,
+        )
+    }))
+    router.Use(gin.Recovery())
+    router.GET("/ping", func(c *gin.Context) {
+        c.String(200, "pong")
+    })
+    router.Run(":8080")
+}
+```
+
+###### 显示行号：
+
+```go
+logrus.SetReportCaller(true)
+```
+
+###### hook：
+
+初始化时为logrus添加hook，logrus可以实现各种扩展功能
+
+```go
+// logrus在记录Levels()返回的日志级别的消息时会触发HOOK
+// 按照Fire方法定义的内容修改logrus.Entry
+type Hook interface {
+    Levels() []Level
+    Fire(*Entry) error
+}
+```
+
+###### gin集成logrus:
+
+use使用中间件，把logrus单独放一个文件中，然后引入进来
+
+1. 初始化日志器和日志实例
+
+   ```go
+   package util
+   
+   import (
+       "fmt"
+       rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+       "github.com/rifflock/lfshook"
+       "github.com/sirupsen/logrus"
+       "os"
+       "time"
+   )
+   
+   var (
+   	Logger = logrus.New()  // 初始化日志对象
+   	LogEntry *logrus.Entry
+   )
+   
+   
+   func init() {
+       // 写入日志文件
+       logPath := "logs/log"  // 日志存放路径
+       linkName := "logs/latest.log"  // 最新日志的软连接路径
+       src, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0755)  // 初始化日志文件对象
+       if err != nil {
+           fmt.Println("err: ", err)
+       }
+       //log := logrus.New()  // 初始化日志对象
+       Logger.Out = src  // 把产生的日志内容写进日志文件中
+   
+       // 日志分隔：1. 每天产生的日志写在不同的文件；2. 只保留一定时间的日志（例如：一星期）
+       Logger.SetLevel(logrus.DebugLevel)  // 设置日志级别
+       logWriter, _ := rotatelogs.New(
+           logPath + "%Y%m%d.log",  // 日志文件名格式
+           rotatelogs.WithMaxAge(7 * 24 * time.Hour),  // 最多保留7天之内的日志
+           rotatelogs.WithRotationTime(24*time.Hour),  // 一天保存一个日志文件
+           rotatelogs.WithLinkName(linkName),  // 为最新日志建立软连接
+       )
+       writeMap := lfshook.WriterMap{
+           logrus.InfoLevel: logWriter,  // info级别使用logWriter写日志
+           logrus.FatalLevel: logWriter,
+           logrus.DebugLevel: logWriter,
+           logrus.ErrorLevel: logWriter,
+           logrus.PanicLevel: logWriter,
+       }
+       Hook := lfshook.NewHook(writeMap, &logrus.TextFormatter{
+           TimestampFormat: "2006-01-02 15:04:05",  // 格式日志时间
+       })
+       Logger.AddHook(Hook)
+       LogEntry = logrus.NewEntry(Logger).WithField("service", "yi-shou-backstage")
+   }
+   ```
+
+2. 在项目中使用定义的日志实例记录日志
+
+   ```go
+   // user列表
+   func ListUsers(ctx *gin.Context){
+       util.LogEntry.Error("用户列表")
+       ctx.JSON(200, gin.H{
+           "message": "hello go",
+       })
+   }
+   ```
+
+3. 定义日志中间件，记录常见异常的日志信息
+
+   ```go
+   package middleware
+   
+   import (
+       "fmt"
+       "github.com/gin-gonic/gin"
+       "github.com/sirupsen/logrus"
+       "math"
+       "time"
+       "yi-shou-backstage/util"
+   )
+   
+   func LoggerMiddleware() gin.HandlerFunc{
+       return func(c *gin.Context) {
+           startTime := time.Now()
+           c.Next()  // 调用该请求的剩余处理程序
+           stopTime := time.Since(startTime)
+           spendTime := fmt.Sprintf("%d ms", int(math.Ceil(float64(stopTime.Nanoseconds() / 1000000))))
+           //hostName, err := os.Hostname()
+           //if err != nil {
+           //    hostName = "Unknown"
+           //}
+           statusCode := c.Writer.Status()
+           //clientIP := c.ClientIP()
+           //userAgent := c.Request.UserAgent()
+           dataSize := c.Writer.Size()
+           if dataSize < 0 {
+               dataSize = 0
+           }
+           method := c.Request.Method
+           url := c.Request.RequestURI
+           Log := util.Logger.WithFields(logrus.Fields{
+               //"HostName": hostName,
+               "SpendTime": spendTime,
+               "path": url,
+               "Method": method,
+               "status": statusCode,
+               //"Ip": clientIP,
+               //"DataSize": dataSize,
+               //"UserAgent": userAgent,
+           })
+           if len(c.Errors) > 0 {  // 矿建内部错误
+               Log.Error(c.Errors.ByType(gin.ErrorTypePrivate))
+           }
+           if statusCode >= 500 {
+               Log.Error()
+           } else if statusCode >= 400 {
+               Log.Warn()
+           }else {
+               Log.Info()
+           }
+       }
+   }
+   ```
+
+4. gin集成自定义的中间件
+
+   ```go
+   router := gin.New()
+   // 注册自定义的日志器
+   router.Use(middleware.LoggerMiddleware())
+   ```
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
