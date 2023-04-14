@@ -1,0 +1,25 @@
+<!--相当于给模板定义一个名字define end 成对出现-->
+{{define "test/index.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <link rel="stylesheet" href="../../static/css/base.css">
+</head>
+<body>
+{{template "public/page_header.html" .}}
+<header>
+<!--    定义变量-->
+    {{$t := .title}}
+    <h4>这里测试变量标题：{{$t}}</h4>
+    <div class="test">测试gin的html模板文件{{.title}}</div>
+    新闻内容{{.news.Title}}
+    我是新的模板页面！！~~~
+</header>
+</body>
+</html>
+{{end}}
