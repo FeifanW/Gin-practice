@@ -5,6 +5,8 @@ import (
 	"Gin-practice/middlewares"
 	"Gin-practice/models"
 	"fmt"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"html/template"
 	"time"
@@ -62,6 +64,12 @@ func main() {
 	r.LoadHTMLGlob("templates/**/*")
 	// 配置静态服务web目录  第一个参数表示路由，第二个参数表示映射目录
 	r.Static("/static", "././static")
+
+	// 配置session中间件
+	// 创建基于cookie的存储引擎，secret11111 参数是用于加密的秘钥
+	store := cookie.NewStore([]byte("secret111"))
+	//配置session中间件 store 是前面创建的存储引擎，我们可以替换成其他存储引擎
+	r.Use(sessions.Sessions("mysession", store))
 
 	// 全局中间件
 	r.Use(initMiddlewareOne, initMiddlewareTwo)
